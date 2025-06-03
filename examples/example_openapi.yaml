@@ -1,0 +1,37 @@
+openapi: 3.0.0
+info:
+  title: Minimal Pet API Test
+  version: 1.0.0
+paths:
+  /pets/{petId}:
+    get:
+      summary: Info for a specific pet
+      operationId: show_pet_by_id
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The id of the pet to retrieve
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Expected response to a valid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+components:
+  schemas:
+    Pet:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        tag:
+          type: string

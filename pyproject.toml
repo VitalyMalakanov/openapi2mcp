@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "openapi2mcp"
+version = "0.1.0"
+description = "A tool to convert OpenAPI 3.x specifications to FastMCP servers."
+authors = ["Your Name <you@example.com>"] # Замени на свои данные если хочешь
+readme = "README.md"
+license = "MIT"
+packages = [{include = "openapi2mcp"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+click = "^8.1.7"
+pyyaml = "^6.0.1"
+pydantic = "^2.7.1"
+fastmcp = ">=2.2.0"
+uvicorn = "^0.29.0" # For http transport
+fastapi = "^0.110.0" # Often used with uvicorn for ASGI apps
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.0"
+ruff = "^0.4.4" # Линтер и форматер
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+openapi2mcp = "openapi2mcp.cli:main"
