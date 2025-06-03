@@ -1,5 +1,7 @@
 # openapi2mcp
 
+[Читать на русском](README.ru.md)
+
 A tool to convert OpenAPI 3.x specifications to FastMCP servers.
 
 ## Installation
@@ -87,6 +89,36 @@ See example implementations:
 - `openapi2mcp/parser.py`: OpenAPI specification parser
 - `openapi2mcp/generator.py`: FastMCP server code generator
 - `openapi2mcp/cli.py`: Command-line interface
+
+## Architecture
+
+The project consists of three main components:
+
+*   `parser.py`: This module is responsible for reading and parsing the OpenAPI 3.x specification file. It validates the structure and extracts relevant information about paths, operations, schemas, and parameters.
+*   `generator.py`: This module takes the parsed OpenAPI data and generates the Python code for a FastMCP server. It maps OpenAPI operations to MCP resources and methods, creating the necessary handlers and data structures.
+*   `cli.py`: This module provides the command-line interface for the tool, allowing users to invoke the generation process and other utility functions like checking the generated server code or displaying the tool's version.
+
+## Core Principles / How it Works
+
+The general workflow of `openapi2mcp` is as follows:
+
+1.  **OpenAPI Specification Input**: The user provides an OpenAPI 3.x specification file (in JSON or YAML format) that describes their API.
+2.  **Parsing**: The `parser.py` module reads this specification and transforms it into an internal representation, making it easier for the generator to understand the API structure.
+3.  **Code Generation**: The `generator.py` module processes this internal representation. It iterates through the API paths and operations, generating corresponding FastMCP resources and Python functions. It also handles the conversion of OpenAPI schemas into Pydantic models for request and response validation.
+4.  **MCP Server Output**: The result is a Python file containing a fully functional FastMCP server. This server can then be run using a suitable MCP transport (like STDIO or Google Pub/Sub).
+5.  **LLMs Description (Optional)**: Alongside the server, an `llms.txt` file can be generated. This file provides a natural language description of the tools (API endpoints) and resources available in the generated server, which can be useful for integration with Large Language Models.
+
+## Customization
+
+The generated MCP server code is standard Python and FastMCP code. This means you can:
+
+*   **Modify the generated code**: Feel free to edit the output Python file to tweak logic, add custom error handling, or integrate additional functionalities not covered by the OpenAPI specification.
+*   **Extend functionality**: You can add new MCP resources or methods to the generated server, or import and use other Python libraries within your server code.
+*   **Change transport or middleware**: While the transport is selected during generation, you can manually adjust the server setup or add FastMCP middleware as needed.
+
+<!-- Add PyPI version badge here -->
+<!-- Add License badge here -->
+<!-- Add other relevant badges here (e.g., build status, code coverage) -->
 
 ## License
 

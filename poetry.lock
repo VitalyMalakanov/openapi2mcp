@@ -272,14 +272,14 @@ all = ["email_validator (>=2.0.0)", "httpx (>=0.23.0)", "itsdangerous (>=1.1.0)"
 
 [[package]]
 name = "fastmcp"
-version = "2.6.0"
+version = "2.6.1"
 description = "The fast, Pythonic way to build MCP servers."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
 files = [
-    {file = "fastmcp-2.6.0-py3-none-any.whl", hash = "sha256:67124db82b7eeb7612e4a6858d051a3c03beb9c4375e4a4011798bce37c841f8"},
-    {file = "fastmcp-2.6.0.tar.gz", hash = "sha256:15ca75ab9b95c3683ada82d7403c82e8fbae74bbded44776990dd192454a8c38"},
+    {file = "fastmcp-2.6.1-py3-none-any.whl", hash = "sha256:d83a2fcffa721cbb91b29c738d39de20b54e1b1ebef5be652d6a4956ecac7ad3"},
+    {file = "fastmcp-2.6.1.tar.gz", hash = "sha256:212f15a4edf8289e5c3c70796910dc612ef891f84df3257a277457bb761d1362"},
 ]
 
 [package.dependencies]
@@ -1100,4 +1100,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.10"
-content-hash = "4a92e1ec92073a7a10ab0d56921b939faeb1474d3ab97db210e1057e28d205f8"
+content-hash = "3205dc97dd15bc5d492c2a42bce4a080959d9a6817681c4e1928f03bffa3c3d4"
