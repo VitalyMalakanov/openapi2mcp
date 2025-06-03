@@ -1,0 +1,17 @@
+## create_pet
+Create a pet
+Параметры:
+- pet: Pet {id: int, name: str, tag: str}
+
+
+## update_pet
+Update an existing pet
+Параметры:
+- pet_id: str
+- pet: Pet {id: int, name: str, tag: str}
+
+
+## delete_pet
+Deletes a pet
+Параметры:
+- pet_id: str

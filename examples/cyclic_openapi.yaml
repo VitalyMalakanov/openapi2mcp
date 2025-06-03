@@ -1,0 +1,46 @@
+openapi: 3.0.0
+info:
+  title: Cyclic Dependencies Test API
+  version: 1.0.0
+paths: {} # No paths needed for this specific test, focusing on model generation
+
+components:
+  schemas:
+    Employee:
+      type: object
+      properties:
+        name:
+          type: string
+        id:
+          type: integer
+          description: Unique ID for employee
+        manages: # Employee manages a list of Employees
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
+        reports_to: # Employee reports to another Employee
+          $ref: '#/components/schemas/Employee'
+        department: # Employee belongs to a Department
+          $ref: '#/components/schemas/Department'
+    Department:
+      type: object
+      properties:
+        name:
+          type: string
+        id:
+          type: integer
+        members: # Department has a list of Employees
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
+        company: # Department belongs to a Company
+          $ref: '#/components/schemas/Company'
+    Company:
+      type: object
+      properties:
+        name:
+          type: string
+        departments: # Company has a list of Departments
+          type: array
+          items:
+            $ref: '#/components/schemas/Department'

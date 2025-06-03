@@ -1,0 +1,6 @@
+openapi: 3.0.1
+info:
+  title: Definitely Broken YAML
+  version: 1.0.0
+paths:
+  foo: bar: baz # This line is definitely a YAML syntax error
