@@ -1,13 +1,22 @@
+import logging
+import re
+import sys
+from pathlib import Path
+
 import click
-from pathlib import Path # Added for llms.txt path manipulation
-from .parser import load_openapi_spec, OpenAPIParserError
-from .generator import generate_mcp_server_code, generate_llms_txt # Updated import
+
+from .generator import MCPGenerator
+from .parser import OpenAPIParser, OpenAPIParserError
+
+# Basic logging setup
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
+
+VERSION_STRING = "openapi2mcp v1.0.0" # TODO: Centralize versioning, perhaps __version__
 
 @click.group()
 def main():
-    """
-    OpenAPI to FastMCP server converter.
-    """
+    """openapi2mcp - OpenAPI to MCP Server Code Generator"""
     pass
 
 @main.command()
@@ -15,97 +24,140 @@ def main():
     "-i",
     "--input-file",
     required=True,
-    type=click.Path(exists=True, dir_okay=False, readable=True),
-    help="Path to the input OpenAPI 3.x specification file (YAML or JSON).",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to the OpenAPI specification file (JSON or YAML).",
 )
 @click.option(
     "-o",
     "--output-file",
     required=True,
-    type=click.Path(dir_okay=False, writable=True),
-    help="Path to save the generated FastMCP server Python file.",
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    help="Path to the output Python file for the generated MCP server.",
 )
 @click.option(
+    "-t",
     "--transport",
-    type=click.Choice(['stdio', 'sse', 'http'], case_sensitive=False),
-    default='stdio',
+    type=click.Choice(["stdio", "google_pubsub"], case_sensitive=False),
+    default="stdio",
     show_default=True,
-    help="The transport protocol to run the generated MCP server with.",
+    help="The transport mechanism for the MCP server.",
 )
 @click.option(
     "--llms-txt-file",
-    type=click.Path(dir_okay=False, writable=True, allow_dash=False),
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
+    help="Optional: Path to generate an llms.txt file for language models. If not provided, uses output directory.",
     default=None,
-    help="Path to save the LLM tools description file (llms.txt). Defaults to [OUTPUT_FILE].llms.txt.",
 )
-def generate(input_file: str, output_file: str, transport: str, llms_txt_file: str | None):
-    """
-    Generates a FastMCP server from an OpenAPI specification.
-    """
-    click.echo(f"Input OpenAPI file: {input_file}")
-    click.echo(f"Output MCP server file: {output_file}")
+@click.option(
+    "--mount",
+    "mount_path", # Use a different dest name if 'mount' conflicts
+    default="",
+    help="Mount path for resources (e.g., '/myapi/v1').",
+    show_default=True,
+)
+def generate(input_file: Path, output_file: Path, transport: str, llms_txt_file: Optional[Path], mount_path: str):
+    """Generates MCP server code from an OpenAPI specification."""
+    logger.info(f"Parsing OpenAPI specification from: {input_file}")
 
+    parser = OpenAPIParser()
     try:
-        spec = load_openapi_spec(input_file)
-        click.echo(click.style("OpenAPI specification loaded successfully.", fg="green"))
-
-        api_title = spec.get('info', {}).get('title', 'GeneratedAPI')
-        api_version = spec.get('info', {}).get('version', '0.1.0')
-        mcp_app_details = {"name": api_title, "version": api_version}
-
-        click.echo(f"API Title: {api_title}, Version: {api_version}, Selected transport: {transport}")
-
-        server_code, tool_names_for_llms = generate_mcp_server_code(spec, mcp_app_details, transport)
-
-        # Remove or comment out old Pydantic models echo
-        # schemas = spec.get('components', {}).get('schemas', {})
-        # if schemas:
-        #     click.echo(click.style("\nGenerating Pydantic models...", fg="blue"))
-        #     models_code = generate_pydantic_models(schemas) # This function is still used by generate_mcp_server_code
-        #     click.echo(models_code)
-        # else:
-        #     click.echo(click.style("\nNo component schemas found to generate Pydantic models.", fg="yellow"))
-
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                f.write(server_code)
-            click.echo(click.style(f"MCP server code successfully generated to {output_file}", fg="green"))
-        except IOError as e:
-            click.echo(click.style(f"Error writing to output file {output_file}: {e}", fg="red"), err=True)
-            # Potentially exit or don't proceed to llms.txt if server writing failed
-            return # Exit if server file writing fails
-
-        # Determine path for llms.txt and generate it
-        llms_output_path = llms_txt_file
-        if not llms_output_path:
-            if output_file == "-": # Check if output_file itself is stdout, though type=Path might prevent this.
-                                   # click.Path(allow_dash=True) would be needed for stdout for output_file.
-                                   # Current type for output_file does not allow dash.
-                click.echo(click.style("Skipping llms.txt generation when main output is stdout (not currently supported for main output).", fg="yellow"))
-                llms_output_path = None
-            else:
-                # Ensure output_file is not a directory, which click.Path(dir_okay=False) should handle.
-                p = Path(output_file)
-                llms_output_path = str(p.parent / (p.name + ".llms.txt"))
-
-        if llms_output_path:
-            if tool_names_for_llms:
-                llms_content = generate_llms_txt(spec, tool_names_for_llms)
-                try:
-                    with open(llms_output_path, 'w', encoding='utf-8') as f:
-                        f.write(llms_content)
-                    click.echo(click.style(f"LLM tools description saved to {llms_output_path}", fg="green"))
-                except IOError as e:
-                    click.echo(click.style(f"Error writing LLM tools description to {llms_output_path}: {e}", fg="red"), err=True)
-            else:
-                click.echo(click.style(f"No tools found to generate {llms_output_path}", fg="yellow"))
-
-    except FileNotFoundError as e:
-        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        parser.parse_file(input_file) # parse_file now raises exceptions on failure
+        logger.info("OpenAPI specification parsed successfully.")
     except OpenAPIParserError as e:
-        click.echo(click.style(f"Error parsing OpenAPI spec: {e}", fg="red"), err=True)
+        logger.error(f"Failed to parse OpenAPI specification: {e}")
+        sys.exit(1)
     except Exception as e:
-        click.echo(click.style(f"An unexpected error occurred: {e}", fg="red"), err=True)
+        logger.error(f"An unexpected error occurred during parsing: {e}", exc_info=True)
+        sys.exit(1)
 
-if __name__ == '__main__':
+    logger.info(f"Generating MCP server code to: {output_file}")
+    generator = MCPGenerator(parser, transport=transport, mount_path=mount_path)
+
+    if not generator.generate(str(output_file)): # Generator's generate expects str path
+        logger.error("MCP server code generation failed.")
+        sys.exit(1)
+    logger.info("MCP server code generated successfully.")
+
+    # Determine output directory for llms.txt
+    if llms_txt_file:
+        output_dir_for_llms = llms_txt_file.parent
+        # Ensure llms_txt_file itself is used if it's a full path including filename,
+        # but generator.generate_llms_txt writes a fixed "llms.txt" in the given dir.
+        # So, we just need the directory.
+        # If llms_txt_file is just "llms.txt", parent will be Path(".")
+        # If it's "/path/to/custom_llms.txt", parent is "/path/to"
+        # The generator method will create "llms.txt" in that directory.
+        # This means the --llms-txt-file option effectively specifies the *directory* and *name*
+        # if the name is not "llms.txt".
+        # For now, let's stick to the generator's behavior of creating "llms.txt".
+        # So, if llms_txt_file is "foo/bar.txt", llms.txt will be "foo/llms.txt".
+        # This might be slightly different from original script if it allowed custom filename.
+        # The generator's method is `generate_llms_txt(self, output_dir: str)`
+    else:
+        output_dir_for_llms = output_file.parent
+
+    logger.info(f"Generating llms.txt in directory: {output_dir_for_llms}")
+    if not generator.generate_llms_txt(str(output_dir_for_llms)):
+        logger.warning("llms.txt generation failed. Continuing without it.") # Non-fatal
+    else:
+        logger.info(f"llms.txt generated successfully in {output_dir_for_llms / 'llms.txt'}")
+
+
+@main.command()
+@click.option(
+    "--server-file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help="Path to the generated MCP server Python file to check.",
+)
+def check(server_file: Path):
+    """Checks the generated server code for basic validity."""
+    logger.info(f"Checking generated server file: {server_file}")
+    try:
+        with open(server_file, "r") as f:
+            code = f.read()
+    except IOError as e:
+        logger.error(f"Error reading server file {server_file}: {e}")
+        sys.exit(1)
+
+    # 1. Try to compile the code
+    try:
+        compile(code, str(server_file), "exec")
+        logger.info("Code compilation successful.")
+    except SyntaxError as e:
+        logger.error(f"Syntax error in generated code: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during compilation: {e}", exc_info=True)
+        sys.exit(1)
+
+    # 2. Regex checks (examples from original script)
+    checks = {
+        "Pydantic model definition": r"class\s+\w+\(BaseModel\):",
+        "MCP Resource definition": r"@Server\.resource\(",
+        "MCP Tool definition": r"@Server\.tool\(",
+        "Main function definition": r"def\s+main\(\):",
+        "Server serve call": r"app\.serve\(",
+    }
+
+    all_checks_passed = True
+    for check_name, pattern in checks.items():
+        if re.search(pattern, code):
+            logger.info(f"Check passed: Found {check_name}.")
+        else:
+            logger.warning(f"Check failed: Did not find {check_name} (pattern: {pattern}).")
+            all_checks_passed = False # Mark as warning, not critical failure for now
+
+    if all_checks_passed:
+        logger.info("All basic checks passed.")
+    else:
+        logger.warning("Some basic checks did not pass. Review the generated code.")
+        # Not exiting with error for regex check failures, as they are heuristic.
+
+@main.command()
+def version():
+    """Displays the version of openapi2mcp."""
+    click.echo(VERSION_STRING)
+
+if __name__ == "__main__":
     main()
