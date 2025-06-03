@@ -56,23 +56,92 @@ def _get_llm_type_string(schema_obj: Dict[str, Any], spec: Dict[str, Any], depth
     return "Any"
 
 # --- Name Generation Helpers ---
+
+# A list of Python keywords that cannot be used as identifiers
+PYTHON_KEYWORDS = [
+    "False", "None", "True", "and", "as", "assert", "async", "await",
+    "break", "class", "continue", "def", "del", "elif", "else", "except",
+    "finally", "for", "from", "global", "if", "import", "in", "is", "lambda",
+    "nonlocal", "not", "or", "pass", "raise", "return", "try", "while",
+    "with", "yield"
+]
+
 def _sanitize_python_identifier(name: str) -> str:
+    if not name.strip(): # Handles empty string or string with only spaces
+        return "_generated_name"
+
+    # Replace invalid characters (anything not a letter, digit, or underscore) with a single underscore
     name = re.sub(r'[^0-9a-zA-Z_]', '_', name)
-    name = re.sub(r'^[^a-zA-Z_]+', '', name)
-    if not name: return "_generated_name"
-    if name[0].isdigit(): name = "_" + name
+
+    # Condense multiple consecutive underscores to a single underscore
+    name = re.sub(r'_+', '_', name)
+
+    # If the name consists only of underscores (e.g., "---" became "___" then "_")
+    # or if it became empty after initial char replacement (e.g. if re.sub resulted in empty)
+    if not name.replace("_", ""): # if stripping all '_' leaves an empty string
+        return "_generated_name"
+
+    # If the first character is a digit, prepend an underscore
+    # This must be done *after* initial sanitization and before keyword check
+    if name[0].isdigit():
+        name = "_" + name
+
+    # If the sanitized name is a Python keyword, append an underscore
+    if name in PYTHON_KEYWORDS:
+        name += "_"
+
     return name
 
 def _to_snake_case(name: str) -> str:
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    if not name:
+        return ""
+    # Replace hyphens and other common separators with underscores
+    name = re.sub(r'[-.\s]', '_', name)
+    # Insert underscore before_capitals (handles CamelCase and existing_snake_case gracefully)
+    name = re.sub(r'(?<=[a-z0-9])([A-Z])', r'_\1', name)
+    # Insert underscore before multiple capitals (e.g. HTTPResponse -> HTTP_Response)
+    name = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    # Condense multiple underscores
+    name = re.sub(r'_+', '_', name)
+    # name = name.strip('_') # Removed this line, as it can strip valid leading/trailing underscores.
+    return name.lower()
 
 def _generate_function_name(method: str, path: str, operation_id: str | None) -> str:
-    if operation_id: return _to_snake_case(_sanitize_python_identifier(operation_id))
+    if operation_id:
+        sanitized_op_id = _sanitize_python_identifier(operation_id)
+        return _to_snake_case(sanitized_op_id)
+
     path_parts = path.strip('/').split('/')
-    processed_parts = [f"by_{_to_snake_case(_sanitize_python_identifier(p.strip('{}')))}" if "{" in p and "}" in p else _to_snake_case(_sanitize_python_identifier(p)) for p in path_parts]
-    name_base = "_".join(filter(None, processed_parts))
-    return f"{method.lower()}_{name_base}"
+
+    if not path_parts or path_parts == ['']: # Handle root path or empty path
+        name_base = "root" if path == "/" else _sanitize_python_identifier("") # Uses _generated_name for truly empty
+    else:
+        processed_parts = []
+        for part in path_parts:
+            if "{" in part and "}" in part: # Path parameter
+                param_name = part.strip('{}')
+                # Sanitize the parameter name itself before snake_casing
+                sanitized_param_name = _sanitize_python_identifier(param_name)
+                # Ensure 'by' is not prepended if sanitized_param_name is empty or just an underscore
+                if sanitized_param_name and sanitized_param_name != '_generated_name':
+                     processed_parts.append(f"by_{_to_snake_case(sanitized_param_name)}")
+                else: # fallback if param name was totally invalid
+                    processed_parts.append("by_param")
+            else: # Normal path segment
+                # Sanitize the segment name before snake_casing
+                sanitized_segment = _sanitize_python_identifier(part)
+                if sanitized_segment and sanitized_segment != '_generated_name':
+                    processed_parts.append(_to_snake_case(sanitized_segment))
+                # Do not add a part if the segment was totally invalid
+
+        name_base = "_".join(filter(None, processed_parts))
+        if not name_base : # If all parts were invalid or empty
+            name_base = _sanitize_python_identifier("") # results in _generated_name
+
+    final_name = f"{method.lower()}_{name_base}"
+    # Replace any double underscores that might have formed from joining
+    final_name = re.sub(r'_+', '_', final_name)
+    return final_name
 
 # --- Code Generation Functions ---
 def generate_pydantic_models(schemas: Dict[str, Any]) -> str:
@@ -114,8 +183,8 @@ def generate_mcp_resources(spec: Dict[str, Any]) -> Tuple[List[str], List[Tuple[
             arg_strings = []
             for param in op_spec.get('parameters', []):
                 param_oas_name = param['name']
-                if param.get('in') == 'path': param_py_name = _sanitize_python_identifier(param_oas_name)
-                else: param_py_name = _to_snake_case(_sanitize_python_identifier(param_oas_name))
+                # Path and query parameters are snake_cased after sanitization
+                param_py_name = _to_snake_case(_sanitize_python_identifier(param_oas_name))
                 annotation = oas_schema_to_python_type(param.get('schema', {}), schemas_root)
                 type_hint = f"{annotation} | None = None" if not param.get('required', False) else annotation
                 arg_strings.append(f"{param_py_name}: {type_hint}")
@@ -143,7 +212,8 @@ def generate_mcp_tools(spec: Dict[str, Any]) -> Tuple[List[str], str]:
                 args = ["ctx: fmcp.Context"]
                 param_args = []
                 for p in op_spec.get('parameters',[]):
-                    param_name = _sanitize_python_identifier(p['name']) if p.get('in') == 'path' else _to_snake_case(_sanitize_python_identifier(p['name']))
+                    # All parameter names (path, query, etc.) are snake_cased after sanitization for consistency
+                    param_name = _to_snake_case(_sanitize_python_identifier(p['name']))
                     param_args.append(f"{param_name}: {oas_schema_to_python_type(p.get('schema',{}),schemas_root)}{'' if p.get('required',False) else ' | None = None'}")
                 args.extend(param_args)
                 if 'requestBody' in op_spec:

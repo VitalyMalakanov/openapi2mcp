@@ -1,0 +1,75 @@
+openapi: 3.0.0
+info:
+  title: Test API with Tools
+  version: 1.0.0
+components:
+  schemas:
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+    NewItem:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+      required:
+        - name
+paths:
+  /items:
+    post:
+      summary: Create a new item
+      operationId: create_item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewItem'
+      responses:
+        '201':
+          description: Item created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '400':
+          description: Invalid input
+  /items/{item_id}:
+    put:
+      summary: Update an existing item
+      operationId: update_item
+      parameters:
+        - name: item_id
+          in: path
+          required: true
+          description: ID of the item to update
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewItem' # Reusing NewItem for simplicity
+      responses:
+        '200':
+          description: Item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '404':
+          description: Item not found
